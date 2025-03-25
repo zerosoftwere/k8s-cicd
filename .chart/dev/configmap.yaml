@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8s-cicd-env
+  namespace: develop
+data:
+  service: k8s-cicd

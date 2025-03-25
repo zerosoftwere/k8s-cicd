@@ -1,0 +1,67 @@
+# Build Tag and push to image DigitalOcean Container Registry,
+# Deploy the application on a DIgitalOcean Kubernetes cluster.
+# For description to the entire worklow, see www.digitalocean.com/docs/kubernetes/how-to/deploy-using-github-actions.
+
+name: Build, push, and deploy
+
+# Controls when the action will run.
+on:
+  # Triggers the workflow on push request on the main branch for changes in the specified paths.
+  push:
+    branches:
+      - develop
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v3
+    
+      - name: Build with Maven
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+          run: mvn -B package --file pom.xml
+
+      # Build a Docker image of your application in your registry and tag the image with the $GITHUB_SHA.
+      - name: Build container image
+        run: docker build -f src/main/docker//Dockerfile.jvm -t k8s-cicd:latest .
+      
+      # Install aws-cli.
+      - name: Configure AWS credentials
+        if: github.ref == 'refs/heads/main'
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{vars.AWS_REGION}}
+
+        # Push image to AWS Elastic Container Registry.
+      - name: Tag docker image for AWS Elastic Container Registry
+        if: github.ref == 'refs/heads/develop'
+        run: docker image tag ${{ vars.SERVICE_NAME }}:latest ${{ vars.ECR_SERVICE_REPOSITORY }}:${{ github.run_number }}
+
+      - name: Log in to AWS Elastic Container Registry
+        if: github.ref == 'refs/heads/develop'
+        run: aws ecr get-login-password --region ${{ vars.AWS_REGION }} | docker login --username AWS --password-stdin ${{ vars.AWS_ECR_REPOSITORY }}
+
+      - name: Push image to AWS Elastic Container Registry
+        if: github.ref == 'refs/heads/develop'
+        run: docker push ${{ vars.ECR_SERVICE_REPOSITORY }}:${{ github.run_number }}
+
+      # Deploy to AWS Kubernetes.
+      - name: Update develop deployment file
+        if: github.ref == 'refs/heads/develop'
+        run: sed -i 's|{k8s-cicd}|${{ vars.ECR_SERVICE_REPOSITORY }}:${{github.run_number}}|' $GITHUB_WORKSPACE/.chart/dev/deployment.yaml
+
+      # Deploy to AWS Elastic Kubernetes Service.
+      - name: Save AWS kubeconfig
+        if: github.ref == 'refs/heads/main'
+        run: aws eks --region ${{ vars.AWS_REGION }} update-kubeconfig --name ${{ vars.AWS_CLUSTER_NAME }}
+
+      - name: Deploy to AWS kubernetes develop
+        if: github.ref == 'refs/heads/develop'
+        run: kubectl apply -f $GITHUB_WORKSPACE/.chart/dev

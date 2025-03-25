@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-cicd
+  namespace: develop
+  labels:
+    app: k8s-cicd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-cicd
+  template:
+    metadata:
+      labels:
+        app: k8s-cicd
+    spec:
+      containers:
+      - name: k8s-cicd
+        image: {k8s-cicd:latest}
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: k8s-cicd-env
