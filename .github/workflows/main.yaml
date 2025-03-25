@@ -24,7 +24,10 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
           cache: 'maven'
-          run: mvn -B package --file pom.xml
+
+      # Build with Maven
+      - name: Build with Maven
+        run: $GITHUB_WORKSPACE/mvnw -B package --file pom.xml
 
       # Build a Docker image of your application in your registry and tag the image with the $GITHUB_SHA.
       - name: Build container image
